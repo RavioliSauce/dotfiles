@@ -1,0 +1,7 @@
+{
+    "Alt-/": "lua:comment.comment",
+    "CtrlUnderscore": "lua:comment.comment",
+    "Alt-j": "command:fjump",
+    "\u001b[1;3A": "MoveLinesUp",
+    "\u001b[1;3B": "MoveLinesDown"
+}
