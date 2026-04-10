@@ -1,0 +1,48 @@
+#!/bin/sh
+set -u
+
+file=${1:?usage: micro-json-lint FILE}
+
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s:1:1: jq not found in PATH\n' "$file"
+  exit 127
+fi
+
+output=$(jq -e . "$file" 2>&1 >/dev/null) && exit 0
+status=$?
+
+parsed=$(
+  printf '%s\n' "$output" \
+    | sed -nE 's#^jq: parse error: (.*) at line ([0-9]+), column ([0-9]+)$#\2:\3:\1#p' \
+    | sed -n '1p'
+)
+
+if [ -n "$parsed" ]; then
+  line=${parsed%%:*}
+  rest=${parsed#*:}
+  col=${rest%%:*}
+  msg=${rest#*:}
+  printf '%s:%s:%s: %s\n' "$file" "$line" "$col" "$msg"
+else
+  printf '%s:1:1: %s\n' "$file" "$output"
+fi
+
+exit "$status"
+
+Make it executable:
+
+chmod +x /home/rav/.local/bin/micro-json-lint
+
+Then register it in ~/.config/micro/init.lua:
+
+function init()
+    if linter then
+        linter.makeLinter(
+            "jqjson",
+            "json",
+            "/home/rav/.local/bin/micro-json-lint",
+            {"%f"},
+            "%f:%l:%c: %m"
+        )
+    end
+end
