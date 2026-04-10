@@ -1,0 +1,53 @@
+#!/bin/bash
+
+alias rebash="source ~/.bashrc"
+alias projects="cd /media/rav/BigBoy/Projects && ls"
+alias vm="cd /media/rav/BigBoy/VMs && ls"
+alias apps="cd ~/Apps && ls"
+alias fix-userns="sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
+
+function extract () {
+  if [ $# -eq 0 ]; then
+    echo "Usage: extract <file> [file2] [file3] ..."
+    return 1
+  fi
+
+  for file in "$@"; do
+    if [ -f "$file" ]; then
+      # Get the base name without extension(s)
+      local filename
+      local destdir
+      
+      filename=$(basename "$file")
+      destdir="${filename%%.*}"
+      
+      mkdir -p "$destdir"
+      
+      case "$file" in
+        *.tar.bz2|*.tbz2)  tar xjvf "$file" -C "$destdir"        ;;
+        *.tar.gz|*.tgz)    tar xzvf "$file" -C "$destdir"        ;;
+        *.tar.xz)          tar xJvf "$file" -C "$destdir"        ;;
+        *.tar.zst)         tar --zstd -xvf "$file" -C "$destdir" ;;
+        *.tar)             tar xvf "$file" -C "$destdir"         ;;
+        *.zip)             unzip "$file" -d "$destdir"           ;;
+        *.rar)             unrar x "$file" "$destdir/"           ;;
+        *.7z)              7z x "$file" -o"$destdir"             ;;
+        *.ace)             unace x "$file" "$destdir/"           ;;
+        *.cab)             cabextract "$file" -d "$destdir"      ;;
+        # Single-file compression (copy to dir, then decompress)
+        *.bz2)   cp "$file" "$destdir/" && bzip2 -dv "$destdir/$filename"   ;;
+        *.gz)    cp "$file" "$destdir/" && gunzip -v "$destdir/$filename"   ;;
+        *.xz)    cp "$file" "$destdir/" && xz -dv "$destdir/$filename"      ;;
+        *.zst)   cp "$file" "$destdir/" && zstd -dv "$destdir/$filename"    ;;
+        *.lz4)   cp "$file" "$destdir/" && lz4 -dv "$destdir/$filename"     ;;
+        *.Z)     cp "$file" "$destdir/" && uncompress "$destdir/$filename"  ;;
+        *)
+          rmdir "$destdir" 2>/dev/null
+          echo "'$file' cannot be extracted via extract()"
+          ;;
+      esac
+    else
+      echo "'$file' is not a valid file"
+    fi
+  done
+}
