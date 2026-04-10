@@ -1,0 +1,11 @@
+# --- Tab completion tweaks ---
+set completion-ignore-case on        # Case-insensitive
+set show-all-if-ambiguous on         # Show matches on first Tab
+set mark-symlinked-directories on
+set page-completions off
+
+TAB: menu-complete
+"\e[Z": menu-complete-backward
+
+"\e[A": history-search-backward
+"\e[B": history-search-forward
