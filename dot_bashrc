@@ -130,5 +130,7 @@ eval "$(uv generate-shell-completion bash)"
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-. "/home/rav/.deno/env"
-source /home/rav/.local/share/bash-completion/completions/deno.bash
+
+export PATH="$HOME/.deno/bin:$PATH"
+[ -f "$HOME/.deno/env" ] && . "$HOME/.deno/env"
+[ -f "$HOME/.local/share/bash-completion/completions/deno.bash" ] && . "$HOME/.local/share/bash-completion/completions/deno.bash"

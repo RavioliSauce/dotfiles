@@ -3,5 +3,7 @@
     "linter.ruff": "python",
     "linter.ruff.args": "check --output-format text %f",
     "linter.ruff.errorformat": "%f:%l:%c: %m",
-    "parsecursor": true
+    "parsecursor": true,
+    "tabsize": 2,
+    "tabstospaces": true
 }
