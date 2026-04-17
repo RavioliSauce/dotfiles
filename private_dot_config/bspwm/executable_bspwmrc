@@ -4,7 +4,7 @@ pgrep -x sxhkd > /dev/null || sxhkd &
 
 picom --backend xrender &
 
-feh --bg-scale ~/picture.jpg &
+feh --bg-scale "$HOME/picture.jpg" &
 
 dunst &
 
