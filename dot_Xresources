@@ -1,0 +1,7 @@
+xterm*faceName: Monospace:size=18
+
+xterm*background: #1a1a1a
+
+xterm*foreground: #e5e5e5
+
+xterm*cursorColor: #00ff00
