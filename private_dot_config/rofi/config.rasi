@@ -1,0 +1,11 @@
+configuration {
+    modi: "drun,run,window";
+    show-icons: true;
+    display-drun: "apps";
+    display-run: "run";
+    display-window: "windows";
+    drun-display-format: "{name}";
+    font: "JetBrainsMono Nerd Font 12";
+}
+
+@theme "theme.rasi"

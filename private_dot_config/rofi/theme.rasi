@@ -1,0 +1,150 @@
+* {
+    bg: #1a1b26eb;
+    bg-solid: #1a1b26;
+    surface: #24283bee;
+    surface-alt: #2f3549ee;
+    fg: #a9b1d6;
+    muted: #565f89;
+    border: #414868;
+    accent: #7aa2f7;
+    cyan: #7dcfff;
+    green: #9ece6a;
+    yellow: #e0af68;
+    red: #f7768e;
+
+    background-color: transparent;
+    text-color: @fg;
+    font: "JetBrainsMono Nerd Font 12";
+}
+
+window {
+    anchor: center;
+    location: center;
+    x-offset: 0px;
+    y-offset: 0px;
+    width: 42%;
+    border: 1px;
+    border-radius: 16px;
+    border-color: @border;
+    background-color: @bg;
+    transparency: "real";
+    padding: 18px;
+    children: [mainbox];
+}
+
+mainbox {
+    background-color: transparent;
+    spacing: 16px;
+    children: [inputbar, listview, mode-switcher];
+}
+
+inputbar {
+    background-color: transparent;
+    spacing: 10px;
+    children: [textbox-search, entry];
+}
+
+textbox-search {
+    expand: false;
+    width: 3.2em;
+    background-color: @surface;
+    text-color: @accent;
+    content: "";
+    horizontal-align: 0.4;
+    vertical-align: 0.5;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+entry {
+    expand: true;
+    background-color: @surface;
+    text-color: @fg;
+    placeholder: "Search apps, windows, or commands";
+    placeholder-color: @muted;
+    border-radius: 12px;
+    padding: 12px 16px;
+}
+
+listview {
+    background-color: transparent;
+    columns: 1;
+    lines: 8;
+    spacing: 8px;
+    scrollbar: false;
+}
+
+mode-switcher {
+    background-color: transparent;
+    orientation: horizontal;
+    spacing: 10px;
+}
+
+element {
+    orientation: horizontal;
+    children: [element-icon, element-text];
+    spacing: 12px;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+element normal.normal {
+    background-color: @surface;
+    text-color: @fg;
+}
+
+element alternate.normal {
+    background-color: @surface-alt;
+    text-color: @fg;
+}
+
+element selected.normal {
+    background-color: @accent;
+    text-color: @bg-solid;
+}
+
+element normal.active,
+element alternate.active {
+    background-color: @surface;
+    text-color: @green;
+}
+
+element selected.active {
+    background-color: @green;
+    text-color: @bg-solid;
+}
+
+element normal.urgent,
+element alternate.urgent {
+    background-color: @surface;
+    text-color: @red;
+}
+
+element selected.urgent {
+    background-color: @red;
+    text-color: @bg-solid;
+}
+
+element-icon {
+    background-color: transparent;
+    text-color: inherit;
+    size: 1.2em;
+}
+
+element-text {
+    background-color: transparent;
+    text-color: inherit;
+    vertical-align: 0.5;
+}
+
+button {
+    background-color: @surface;
+    text-color: @muted;
+    border-radius: 12px;
+    padding: 10px 16px;
+}
+
+button selected.normal {
+    background-color: @accent;
+    text-color: @bg-solid;
+}
