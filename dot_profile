@@ -29,4 +29,3 @@ fi
 . "$HOME/.local/bin/env"
 . "/home/rav/.deno/env"
 export PATH="/usr/lib/dotnet/dotnet:$PATH"
-export XAUTHORITY="$HOME/.Xauthority"

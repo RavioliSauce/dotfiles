@@ -54,6 +54,7 @@ Source: [`.tmux.conf`](./.tmux.conf)
 - Learn these first: `|`, `-`, `h/j/k/l`, `z`, `c`, `s`, `d`, `[`.
 - If you prefer commands over keybinds, `Ctrl-a :` opens the tmux prompt for things like `split-window`, `display-popup`, and `new-window`.
 - New splits open in the current pane's working directory, so split from the pane that is already in the project you want.
+- `tmux-layout dev ~/src/project` creates or reattaches a named session with two stacked panes on the left and one large pane on the right.
 - `Ctrl-a y` toggles synchronized panes. Use it when you need to run the same command in several panes, then turn it back off.
 - `Ctrl-a z` is the fastest way to focus on one busy pane without rearranging your layout.
 - If you get lost, use `Ctrl-a s` for sessions, `Ctrl-a w` for windows, and `Ctrl-a q` for pane numbers.

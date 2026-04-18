@@ -1,0 +1,103 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'EOF'
+Usage: tmux-layout [SESSION_NAME] [WORKDIR]
+
+Create or attach to a tmux session with this layout:
+  - pane 1: large pane on the right
+  - pane 2: top-left
+  - pane 3: bottom-left
+
+Defaults:
+  SESSION_NAME: dev
+  WORKDIR:      current directory
+
+Optional environment variables:
+  TMUX_LAYOUT_WINDOW_NAME  Rename the first window (default: main)
+  TMUX_LAYOUT_PANE1_CMD    Command to run in the large right pane
+  TMUX_LAYOUT_PANE2_CMD    Command to run in the top-left pane
+  TMUX_LAYOUT_PANE3_CMD    Command to run in the bottom-left pane
+  TMUX_LAYOUT_NO_ATTACH    Set to 1 to create the session without attaching
+  TMUX_SOCKET_NAME         tmux socket name, useful for testing
+EOF
+}
+
+tmux_cmd() {
+    if [ -n "${TMUX_SOCKET_NAME:-}" ]; then
+        tmux -L "$TMUX_SOCKET_NAME" "$@"
+        return
+    fi
+
+    tmux "$@"
+}
+
+run_pane_command() {
+    pane_id=$1
+    pane_cmd=$2
+
+    if [ -n "$pane_cmd" ]; then
+        tmux_cmd send-keys -t "$pane_id" "$pane_cmd" C-m
+    fi
+}
+
+attach_or_switch() {
+    if [ "${TMUX_LAYOUT_NO_ATTACH:-0}" = "1" ]; then
+        return
+    fi
+
+    if [ -n "${TMUX:-}" ]; then
+        tmux_cmd switch-client -t "$session_name"
+    else
+        tmux_cmd attach-session -t "$session_name"
+    fi
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+esac
+
+if [ "$#" -gt 2 ]; then
+    usage >&2
+    exit 1
+fi
+
+if ! command -v tmux >/dev/null 2>&1; then
+    printf '%s\n' 'tmux-layout: tmux is not installed or not in PATH' >&2
+    exit 127
+fi
+
+session_name=${1:-dev}
+workdir=${2:-$PWD}
+window_name=${TMUX_LAYOUT_WINDOW_NAME:-main}
+pane1_cmd=${TMUX_LAYOUT_PANE1_CMD:-}
+pane2_cmd=${TMUX_LAYOUT_PANE2_CMD:-}
+pane3_cmd=${TMUX_LAYOUT_PANE3_CMD:-}
+
+if [ ! -d "$workdir" ]; then
+    printf 'tmux-layout: workdir does not exist: %s\n' "$workdir" >&2
+    exit 1
+fi
+
+if tmux_cmd has-session -t "$session_name" 2>/dev/null; then
+    attach_or_switch
+    exit 0
+fi
+
+tmux_cmd new-session -d -s "$session_name" -n "$window_name" -c "$workdir"
+
+right_pane=$(tmux_cmd display-message -p -t "$session_name:$window_name" '#{pane_id}')
+left_top_pane=$(tmux_cmd split-window -h -b -p 66 -P -F '#{pane_id}' -t "$right_pane" -c "$workdir")
+left_bottom_pane=$(tmux_cmd split-window -v -p 20 -P -F '#{pane_id}' -t "$left_top_pane" -c "$workdir")
+
+run_pane_command "$right_pane" "$pane1_cmd"
+run_pane_command "$left_top_pane" "$pane2_cmd"
+run_pane_command "$left_bottom_pane" "$pane3_cmd"
+
+tmux_cmd select-pane -t "$right_pane"
+
+attach_or_switch

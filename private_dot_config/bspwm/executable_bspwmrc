@@ -2,7 +2,7 @@
 
 pgrep -x sxhkd > /dev/null || sxhkd &
 
-picom --backend xrender &
+picom &
 
 feh --bg-scale "$HOME/Pictures/picture.jpg" &
 
