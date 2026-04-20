@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+full_date=$(date '+%A, %B %d, %Y')
+current_time=$(date '+%-I:%M:%S %p %Z')
+iso_stamp=$(date --iso-8601=seconds)
+unix_stamp=$(date '+%s')
+
+choice=$(
+  printf '%s\n' \
+    "Copy full date" \
+    "Copy current time" \
+    "Copy ISO timestamp" \
+    "Copy Unix timestamp" \
+    "Show details" \
+  | rofi -dmenu -p "Date" -theme-str 'listview { lines: 5; }'
+)
+
+[ -n "${choice:-}" ] || exit 0
+
+case "$choice" in
+  "Copy full date")
+    printf '%s' "$full_date" | xclip -selection clipboard
+    dunstify "Date copied" "$full_date"
+    ;;
+  "Copy current time")
+    printf '%s' "$current_time" | xclip -selection clipboard
+    dunstify "Time copied" "$current_time"
+    ;;
+  "Copy ISO timestamp")
+    printf '%s' "$iso_stamp" | xclip -selection clipboard
+    dunstify "ISO timestamp copied" "$iso_stamp"
+    ;;
+  "Copy Unix timestamp")
+    printf '%s' "$unix_stamp" | xclip -selection clipboard
+    dunstify "Unix timestamp copied" "$unix_stamp"
+    ;;
+  "Show details")
+    sleep 0.15
+    rofi -e "$(printf 'Date: %s\nTime: %s\nISO:  %s\nUnix: %s' "$full_date" "$current_time" "$iso_stamp" "$unix_stamp")"
+    ;;
+esac

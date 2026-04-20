@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+date_text=$(date '+%a %d %b')
+time_text=$(date '+%-I:%M %p')
+
+printf '%%{A1:/home/rav/.local/bin/rofi-date-menu:} 󰃰 %s 󰥔 %s %%{A}\n' "$date_text" "$time_text"
