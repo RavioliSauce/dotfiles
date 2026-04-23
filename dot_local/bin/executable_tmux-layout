@@ -91,7 +91,7 @@ fi
 tmux_cmd new-session -d -s "$session_name" -n "$window_name" -c "$workdir"
 
 right_pane=$(tmux_cmd display-message -p -t "$session_name:$window_name" '#{pane_id}')
-left_top_pane=$(tmux_cmd split-window -h -b -p 66 -P -F '#{pane_id}' -t "$right_pane" -c "$workdir")
+left_top_pane=$(tmux_cmd split-window -h -b -p 60 -P -F '#{pane_id}' -t "$right_pane" -c "$workdir")
 left_bottom_pane=$(tmux_cmd split-window -v -p 15 -P -F '#{pane_id}' -t "$left_top_pane" -c "$workdir")
 
 run_pane_command "$right_pane" "$pane1_cmd"

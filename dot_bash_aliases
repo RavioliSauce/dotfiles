@@ -5,6 +5,7 @@ alias projects="cd /media/rav/BigBoy/Projects && ls"
 alias vm="cd /media/rav/BigBoy/VMs && ls"
 alias apps="cd ~/Apps && ls"
 alias fix-userns="sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
+alias bat="batcat"
 
 function extract () {
   if [ $# -eq 0 ]; then
