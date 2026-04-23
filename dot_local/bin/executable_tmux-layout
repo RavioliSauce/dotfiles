@@ -42,6 +42,19 @@ run_pane_command() {
     fi
 }
 
+split_window_percent() {
+    percent=$1
+    shift
+
+    # tmux 3.4 documents percentage sizing as `-l 66%`; older tmux used `-p 66`.
+    if pane_id=$(tmux_cmd split-window "$@" -l "${percent}%" -P -F '#{pane_id}' 2>/dev/null); then
+        printf '%s\n' "$pane_id"
+        return 0
+    fi
+
+    tmux_cmd split-window "$@" -p "$percent" -P -F '#{pane_id}'
+}
+
 attach_or_switch() {
     if [ "${TMUX_LAYOUT_NO_ATTACH:-0}" = "1" ]; then
         return
@@ -91,8 +104,8 @@ fi
 tmux_cmd new-session -d -s "$session_name" -n "$window_name" -c "$workdir"
 
 right_pane=$(tmux_cmd display-message -p -t "$session_name:$window_name" '#{pane_id}')
-left_top_pane=$(tmux_cmd split-window -h -b -p 60 -P -F '#{pane_id}' -t "$right_pane" -c "$workdir")
-left_bottom_pane=$(tmux_cmd split-window -v -p 15 -P -F '#{pane_id}' -t "$left_top_pane" -c "$workdir")
+left_top_pane=$(split_window_percent 60 -h -b -t "$right_pane" -c "$workdir")
+left_bottom_pane=$(split_window_percent 15 -v -t "$left_top_pane" -c "$workdir")
 
 run_pane_command "$right_pane" "$pane1_cmd"
 run_pane_command "$left_top_pane" "$pane2_cmd"
