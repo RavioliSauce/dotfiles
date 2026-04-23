@@ -1,6 +1,8 @@
 # Git Cheatsheet (Practical)
 
-## 🔍 Inspecting History
+Related: [Git workflow notes](workflow.md)
+
+## Inspecting History
 
 ### Basic log
 git log
@@ -22,7 +24,7 @@ git log --after="2024-01-01" --before="2024-02-01"
 
 ---
 
-## 📦 Inspecting Commits
+## Inspecting Commits
 
 ### Show latest commit
 git show
@@ -44,7 +46,7 @@ git show <commit>:path/to/file
 
 ---
 
-## 🔄 Diffing Changes
+## Diffing Changes
 
 ### Unstaged changes
 git diff
@@ -66,7 +68,7 @@ git diff --stat
 
 ---
 
-## 🧠 Mental Models
+## Mental Models
 
 - **Working directory** → your files
 - **Staging area** → what will be committed
@@ -74,7 +76,7 @@ git diff --stat
 
 ---
 
-## ⚡ Daily Flow
+## Daily Flow
 
 git status
 git add .
@@ -82,7 +84,7 @@ git commit -m "message"
 
 ---
 
-## 🔥 High-Value Tricks
+## High-Value Tricks
 
 ### See what changed before committing
 git diff --staged
@@ -101,7 +103,7 @@ git commit --amend -m "new message"
 
 ---
 
-## 🧭 Exploration
+## Exploration
 
 ### Who changed a line?
 git blame path/to/file
@@ -111,14 +113,14 @@ git log -p -S "string"
 
 ---
 
-## 🧼 Cleanup
+## Cleanup
 
 ### Remove untracked files
 git clean -fd
 
 ---
 
-## 📝 Notes
+## Notes
 
 - Prefer `--oneline --graph --decorate --all` as your default log view
 - Always check `git diff --staged` before committing
