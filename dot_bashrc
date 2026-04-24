@@ -134,3 +134,5 @@ export NVM_DIR="$HOME/.nvm"
 export PATH="$HOME/.deno/bin:$PATH"
 [ -f "$HOME/.deno/env" ] && . "$HOME/.deno/env"
 [ -f "$HOME/.local/share/bash-completion/completions/deno.bash" ] && . "$HOME/.local/share/bash-completion/completions/deno.bash"
+
+source /home/rav/.local/share/bash-completion/completions/deno.bash
