@@ -15,6 +15,22 @@ super + Escape
 	pkill -USR1 -x sxhkd
 
 #
+# multimedia keys
+#
+
+XF86AudioRaiseVolume
+	wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+
+XF86AudioLowerVolume
+	wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+
+XF86AudioMute
+	wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+
+XF86AudioMicMute
+	wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+
+#
 # bspwm hotkeys
 #
 
@@ -79,6 +95,10 @@ super + {o,i}
 	bspc wm -h off; \
 	bspc node {older,newer} -f; \
 	bspc wm -h on
+
+# focus the newest urgent window
+super + u
+	bspc node -f newest.urgent.window
 
 # focus or send to the given desktop
 super + {_,shift + }{1-9,0}

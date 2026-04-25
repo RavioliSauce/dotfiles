@@ -6,9 +6,8 @@ usage() {
 Usage: tmux-layout [SESSION_NAME] [WORKDIR]
 
 Create or attach to a tmux session with this layout:
-  - pane 1: large pane on the right
-  - pane 2: top-left
-  - pane 3: bottom-left
+  - pane 1: top pane
+  - pane 2: bottom pane, 5 lines tall
 
 Defaults:
   SESSION_NAME: dev
@@ -16,9 +15,8 @@ Defaults:
 
 Optional environment variables:
   TMUX_LAYOUT_WINDOW_NAME  Rename the first window (default: main)
-  TMUX_LAYOUT_PANE1_CMD    Command to run in the large right pane
-  TMUX_LAYOUT_PANE2_CMD    Command to run in the top-left pane
-  TMUX_LAYOUT_PANE3_CMD    Command to run in the bottom-left pane
+  TMUX_LAYOUT_PANE1_CMD    Command to run in the top pane
+  TMUX_LAYOUT_PANE2_CMD    Command to run in the bottom pane
   TMUX_LAYOUT_NO_ATTACH    Set to 1 to create the session without attaching
   TMUX_SOCKET_NAME         tmux socket name, useful for testing
 EOF
@@ -42,17 +40,33 @@ run_pane_command() {
     fi
 }
 
-split_window_percent() {
-    percent=$1
-    shift
-
-    # tmux 3.4 documents percentage sizing as `-l 66%`; older tmux used `-p 66`.
-    if pane_id=$(tmux_cmd split-window "$@" -l "${percent}%" -P -F '#{pane_id}' 2>/dev/null); then
-        printf '%s\n' "$pane_id"
-        return 0
+current_window_size() {
+    if [ -n "${TMUX:-}" ]; then
+        tmux_cmd display-message -p '#{window_width} #{window_height}' 2>/dev/null
+        return
     fi
 
-    tmux_cmd split-window "$@" -p "$percent" -P -F '#{pane_id}'
+    if ! command -v tput >/dev/null 2>&1; then
+        return 1
+    fi
+
+    cols=$(tput cols 2>/dev/null) || return 1
+    lines=$(tput lines 2>/dev/null) || return 1
+
+    case "$cols" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+
+    case "$lines" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+
+    if [ "$cols" -le 0 ] || [ "$lines" -le 1 ]; then
+        return 1
+    fi
+
+    # tmux window height excludes the status line.
+    printf '%s %s\n' "$cols" "$((lines - 1))"
 }
 
 attach_or_switch() {
@@ -89,7 +103,6 @@ workdir=${2:-$PWD}
 window_name=${TMUX_LAYOUT_WINDOW_NAME:-main}
 pane1_cmd=${TMUX_LAYOUT_PANE1_CMD:-}
 pane2_cmd=${TMUX_LAYOUT_PANE2_CMD:-}
-pane3_cmd=${TMUX_LAYOUT_PANE3_CMD:-}
 
 if [ ! -d "$workdir" ]; then
     printf 'tmux-layout: workdir does not exist: %s\n' "$workdir" >&2
@@ -101,16 +114,20 @@ if tmux_cmd has-session -t "$session_name" 2>/dev/null; then
     exit 0
 fi
 
-tmux_cmd new-session -d -s "$session_name" -n "$window_name" -c "$workdir"
+if window_size=$(current_window_size); then
+    window_width=${window_size% *}
+    window_height=${window_size#* }
+    tmux_cmd new-session -d -x "$window_width" -y "$window_height" -s "$session_name" -n "$window_name" -c "$workdir"
+else
+    tmux_cmd new-session -d -s "$session_name" -n "$window_name" -c "$workdir"
+fi
 
-right_pane=$(tmux_cmd display-message -p -t "$session_name:$window_name" '#{pane_id}')
-left_top_pane=$(split_window_percent 60 -h -b -t "$right_pane" -c "$workdir")
-left_bottom_pane=$(split_window_percent 15 -v -t "$left_top_pane" -c "$workdir")
+top_pane=$(tmux_cmd display-message -p -t "$session_name:$window_name" '#{pane_id}')
+bottom_pane=$(tmux_cmd split-window -v -l 7 -t "$top_pane" -c "$workdir" -P -F '#{pane_id}')
 
-run_pane_command "$right_pane" "$pane1_cmd"
-run_pane_command "$left_top_pane" "$pane2_cmd"
-run_pane_command "$left_bottom_pane" "$pane3_cmd"
+run_pane_command "$top_pane" "$pane1_cmd"
+run_pane_command "$bottom_pane" "$pane2_cmd"
 
-tmux_cmd select-pane -t "$right_pane"
+tmux_cmd select-pane -t "$top_pane"
 
 attach_or_switch

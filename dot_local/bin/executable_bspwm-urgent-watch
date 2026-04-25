@@ -1,0 +1,43 @@
+#! /bin/sh
+
+event_fifo="${XDG_RUNTIME_DIR:-/tmp}/bspwm-urgent-watch.$$"
+subscribe_pid=
+
+cleanup() {
+    if [ -n "$subscribe_pid" ]; then
+        kill "$subscribe_pid" 2>/dev/null
+    fi
+    rm -f "$event_fifo"
+}
+
+trap cleanup EXIT
+trap 'cleanup; exit' INT TERM
+
+mkfifo "$event_fifo" || exit 1
+bspc subscribe node_flag > "$event_fifo" &
+subscribe_pid=$!
+
+while read -r event monitor desktop node flag state; do
+    if [ "$flag" != "urgent" ] || [ "$state" != "on" ]; then
+        continue
+    fi
+
+    desktop_name="$(bspc query -D -d "$desktop" --names 2>/dev/null)"
+    [ -n "$desktop_name" ] || desktop_name="$desktop"
+
+    node_json="$(bspc query -T -n "$node" 2>/dev/null)"
+    window_class="$(printf '%s\n' "$node_json" | /usr/bin/jq -r '.client.className // .client.instanceName // "Window"' 2>/dev/null)"
+    window_title="$(printf '%s\n' "$node_json" | /usr/bin/jq -r '.client.name // empty' 2>/dev/null)"
+    [ -n "$window_class" ] || window_class="Window"
+
+    if [ -n "$window_title" ]; then
+        urgent_message="Desktop $desktop_name: $window_title
+Use Super+U to focus it"
+    else
+        urgent_message="Desktop $desktop_name
+Use Super+U to focus it"
+    fi
+
+    /usr/bin/dunstify -a bspwm -u normal -h string:x-dunst-stack-tag:bspwm-urgent \
+        "Urgent: $window_class" "$urgent_message"
+done < "$event_fifo"

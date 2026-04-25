@@ -1,0 +1,284 @@
+#!/bin/sh
+set -eu
+
+scan_seconds=${BLUETOOTH_SCAN_SECONDS:-8}
+rofi_lines=${BLUETOOTH_ROFI_LINES:-12}
+
+notify() {
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify "$@"
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send "$@"
+  fi
+}
+
+die_rofi() {
+  if command -v rofi >/dev/null 2>&1; then
+    rofi -e "$1"
+  else
+    printf '%s\n' "$1" >&2
+  fi
+  exit 1
+}
+
+require_bluetoothctl() {
+  command -v bluetoothctl >/dev/null 2>&1 || die_rofi "bluetoothctl is not installed. Install the bluetooth package."
+}
+
+controller_info() {
+  bluetoothctl show 2>/dev/null || true
+}
+
+controller_powered() {
+  controller_info | awk -F': ' '/^[[:space:]]*Powered:/ { print $2; exit }'
+}
+
+device_prop() {
+  mac=$1
+  prop=$2
+
+  bluetoothctl info "$mac" 2>/dev/null \
+    | awk -F': ' -v prop="$prop" '$1 ~ "^[[:space:]]*" prop "$" { print $2; exit }'
+}
+
+device_name() {
+  mac=$1
+  name=$(device_prop "$mac" "Name")
+  [ -n "$name" ] || name=$(device_prop "$mac" "Alias")
+  [ -n "$name" ] || name="Unknown device"
+  printf '%s\n' "$name"
+}
+
+run_bt() {
+  label=$1
+  shift
+
+  output=$(bluetoothctl "$@" 2>&1) && {
+    notify "Bluetooth" "$label"
+    return 0
+  }
+
+  notify "Bluetooth failed" "$output"
+  die_rofi "$output"
+}
+
+trust_device() {
+  mac=$1
+
+  output=$(bluetoothctl trust "$mac" 2>&1) || {
+    notify "Bluetooth trust failed" "$output"
+    return 1
+  }
+}
+
+connect_device() {
+  mac=$1
+  name=$2
+
+  if output=$(bluetoothctl connect "$mac" 2>&1); then
+    trust_device "$mac" >/dev/null 2>&1 || true
+    notify "Bluetooth" "Connected and trusted $name"
+    return 0
+  fi
+
+  first_output=$output
+  pair_output=$(bluetoothctl --agent NoInputNoOutput --timeout 30 pair "$mac" 2>&1) || true
+  trust_device "$mac" >/dev/null 2>&1 || true
+
+  if output=$(bluetoothctl connect "$mac" 2>&1); then
+    trust_device "$mac" >/dev/null 2>&1 || true
+    notify "Bluetooth" "Connected and trusted $name"
+    return 0
+  fi
+
+  die_rofi "$(printf 'Connect failed:\n%s\n\nPair attempt:\n%s\n\nSecond connect failed:\n%s' "$first_output" "$pair_output" "$output")"
+}
+
+scan_devices() {
+  notify "Bluetooth" "Scanning for ${scan_seconds}s..."
+  bluetoothctl power on >/dev/null 2>&1 || true
+  bluetoothctl --timeout "$scan_seconds" scan on >/dev/null 2>&1 || true
+}
+
+device_rows() {
+  bluetoothctl devices 2>/dev/null \
+    | awk '/^Device[[:space:]]+([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}[[:space:]]+/ {
+        mac = $2
+        $1 = ""
+        $2 = ""
+        sub(/^[[:space:]]+/, "")
+        print mac "\t" $0
+      }' \
+    | sort -u \
+    | while IFS='	' read -r mac name; do
+        [ -n "$mac" ] || continue
+
+        connected=$(device_prop "$mac" "Connected")
+        paired=$(device_prop "$mac" "Paired")
+        trusted=$(device_prop "$mac" "Trusted")
+
+        state="[seen]"
+        [ "$trusted" = "yes" ] && state="[trusted]"
+        [ "$paired" = "yes" ] && state="[paired]"
+        [ "$connected" = "yes" ] && state="[connected]"
+
+        [ -n "$name" ] || name=$(device_name "$mac")
+        printf '%s %s  %s\n' "$state" "$name" "$mac"
+      done
+}
+
+status_label() {
+  if ! command -v bluetoothctl >/dev/null 2>&1; then
+    printf ' 󰂲 missing '
+    return
+  fi
+
+  info=$(controller_info)
+  if [ -z "$info" ]; then
+    printf ' 󰂲 down '
+    return
+  fi
+
+  powered=$(printf '%s\n' "$info" | awk -F': ' '/^[[:space:]]*Powered:/ { print $2; exit }')
+  if [ "$powered" != "yes" ]; then
+    printf ' 󰂲 off '
+    return
+  fi
+
+  connected=$(bluetoothctl devices Connected 2>/dev/null || true)
+  if [ -n "$connected" ]; then
+    count=$(printf '%s\n' "$connected" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+    name=$(printf '%s\n' "$connected" | sed -n '1s/^Device [^[:space:]]* //p')
+    if [ "$count" = "1" ] && [ -n "$name" ]; then
+      short=$(printf '%s' "$name" | cut -c 1-18)
+      printf ' 󰂱 %s ' "$short"
+    else
+      printf ' 󰂱 %s connected ' "$count"
+    fi
+    return
+  fi
+
+  printf ' 󰂯 on '
+}
+
+extract_mac() {
+  printf '%s\n' "$1" | grep -Eo '([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}' | tail -n 1
+}
+
+show_info() {
+  mac=$1
+  rofi -e "$(bluetoothctl info "$mac" 2>&1)"
+}
+
+device_menu() {
+  mac=$1
+  name=$(device_name "$mac")
+  connected=$(device_prop "$mac" "Connected")
+  trusted=$(device_prop "$mac" "Trusted")
+
+  actions=""
+  if [ "$connected" = "yes" ]; then
+    actions="${actions}Disconnect\n"
+  else
+    actions="${actions}Connect\n"
+  fi
+
+  if [ "$trusted" = "yes" ]; then
+    actions="${actions}Untrust\n"
+  else
+    actions="${actions}Trust\n"
+  fi
+
+  actions="${actions}Remove\nShow info\nBack\n"
+
+  choice=$(
+    printf '%b' "$actions" \
+      | rofi -dmenu -i -p "$name" -theme-str "listview { lines: 7; }"
+  )
+
+  [ -n "${choice:-}" ] || exit 0
+
+  case "$choice" in
+    "Connect")
+      connect_device "$mac" "$name"
+      ;;
+    "Disconnect")
+      run_bt "Disconnected $name" disconnect "$mac"
+      ;;
+    "Trust")
+      run_bt "Trusted $name" trust "$mac"
+      ;;
+    "Untrust")
+      run_bt "Untrusted $name" untrust "$mac"
+      ;;
+    "Remove")
+      run_bt "Removed $name" remove "$mac"
+      ;;
+    "Show info")
+      show_info "$mac"
+      ;;
+    "Back")
+      show_menu
+      ;;
+  esac
+}
+
+show_menu() {
+  require_bluetoothctl
+
+  info=$(controller_info)
+  [ -n "$info" ] || die_rofi "Bluetooth service is not available. Start bluetooth.service first."
+
+  powered=$(controller_powered)
+
+  if [ "$powered" = "yes" ]; then
+    actions="Scan for devices\nTurn Bluetooth off\n"
+  else
+    actions="Turn Bluetooth on\n"
+  fi
+
+  rows=$(device_rows)
+  choice=$(
+    {
+      printf '%b' "$actions"
+      [ -z "$rows" ] || printf '%s\n' "$rows"
+    } | rofi -dmenu -i -p "Bluetooth" -theme-str "listview { lines: ${rofi_lines}; }"
+  )
+
+  [ -n "${choice:-}" ] || exit 0
+
+  case "$choice" in
+    "Scan for devices")
+      scan_devices
+      show_menu
+      ;;
+    "Turn Bluetooth on")
+      run_bt "Bluetooth powered on" power on
+      show_menu
+      ;;
+    "Turn Bluetooth off")
+      run_bt "Bluetooth powered off" power off
+      ;;
+    *)
+      mac=$(extract_mac "$choice")
+      [ -n "$mac" ] && device_menu "$mac"
+      ;;
+  esac
+}
+
+toggle_power() {
+  require_bluetoothctl
+
+  case "$(controller_powered)" in
+    yes) run_bt "Bluetooth powered off" power off ;;
+    *) run_bt "Bluetooth powered on" power on ;;
+  esac
+}
+
+case "${1:---menu}" in
+  --status) status_label ;;
+  --menu) show_menu ;;
+  --scan) scan_devices ;;
+  --toggle-power) toggle_power ;;
+  *) die_rofi "Usage: bluetooth-menu [--status|--menu|--scan|--toggle-power]" ;;
+esac
