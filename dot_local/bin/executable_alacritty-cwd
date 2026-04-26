@@ -1,0 +1,41 @@
+#!/bin/sh
+
+focused_window_pid() {
+    if command -v bspc >/dev/null 2>&1 && command -v xprop >/dev/null 2>&1; then
+        window_id="$(bspc query -N -n focused 2>/dev/null)" || window_id=
+        if [ -n "$window_id" ]; then
+            xprop -id "$window_id" _NET_WM_PID 2>/dev/null \
+                | awk -F' = ' '/_NET_WM_PID/ { print $2; exit }'
+            return
+        fi
+    fi
+
+    if command -v xdotool >/dev/null 2>&1; then
+        xdotool getactivewindow getwindowpid 2>/dev/null
+    fi
+}
+
+deepest_child_pid() {
+    pid="$1"
+
+    while [ -r "/proc/$pid/task/$pid/children" ]; do
+        children="$(cat "/proc/$pid/task/$pid/children" 2>/dev/null)" || break
+        [ -n "$children" ] || break
+
+        for child in $children; do
+            pid="$child"
+        done
+    done
+
+    printf '%s\n' "$pid"
+}
+
+pid="$(focused_window_pid)"
+cwd=
+
+if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+    pid="$(deepest_child_pid "$pid")"
+    cwd="$(readlink -e "/proc/$pid/cwd" 2>/dev/null)" || cwd=
+fi
+
+exec alacritty --working-directory "${cwd:-$HOME}"
