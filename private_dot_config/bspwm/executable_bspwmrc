@@ -32,6 +32,8 @@ bspc rule -a Gimp desktop='^8' state=floating follow=on
 bspc rule -a mplayer2 state=floating
 bspc rule -a Kupfer.py focus=on
 bspc rule -a Screenkey manage=off
+bspc rule -a 'python3:python3:*Widget' state=floating
+bspc rule -a '*:crx_nngceckbapebfimnlniiiahkandclblb' state=floating
 
 pkill -f "$HOME/.local/bin/bspwm-urgent-watch" 2>/dev/null
 "$HOME/.local/bin/bspwm-urgent-watch" &
