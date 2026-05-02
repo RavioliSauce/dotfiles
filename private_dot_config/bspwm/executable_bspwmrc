@@ -34,6 +34,7 @@ bspc rule -a Kupfer.py focus=on
 bspc rule -a Screenkey manage=off
 bspc rule -a 'python3:python3:*Widget' state=floating
 bspc rule -a '*:crx_nngceckbapebfimnlniiiahkandclblb' state=floating
+bspc rule -a '*:*:Picture in picture' state=floating sticky=on layer=above
 
 pkill -f "$HOME/.local/bin/bspwm-urgent-watch" 2>/dev/null
 "$HOME/.local/bin/bspwm-urgent-watch" &
