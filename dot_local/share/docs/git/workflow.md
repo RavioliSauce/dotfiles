@@ -2,8 +2,9 @@
 
 This page is a linked sibling Markdown file for testing Grip navigation.
 
-Start from the [Git cheatsheet](cheatsheet.md), or jump directly to its
-[daily flow section](cheatsheet.md#daily-flow).
+Start from the [Git cheatsheet](cheatsheet.md), jump directly to its
+[daily flow section](cheatsheet.md#daily-flow), or open the
+[recovery notes](recovery.md) when undoing work.
 
 ## Safe Daily Loop
 
@@ -23,6 +24,8 @@ git add path/to/file
 git diff --staged
 git commit -m "Describe the focused change"
 ```
+
+Related: [daily flow commands](cheatsheet.md#daily-flow), [safe commands](recovery.md#safe-commands).
 
 ## Branching
 
@@ -55,6 +58,8 @@ If a file was staged by mistake:
 git restore --staged path/to/file
 ```
 
+Related: [diffing changes](cheatsheet.md#diffing-changes), [unstage without losing work](recovery.md#unstage-without-losing-work).
+
 ## Keeping History Readable
 
 Good commits are small, named clearly, and contain one logical change. If the
@@ -66,8 +71,11 @@ git commit --amend -m "Use clearer commit message"
 
 Avoid rewriting commits that other people may already have based work on.
 
+Related: [fix last commit](recovery.md#fix-last-commit), [undo a shared commit safely](recovery.md#undo-a-shared-commit-safely).
+
 ## More References
 
 - Back to the [main cheatsheet](cheatsheet.md).
+- Open the [recovery notes](recovery.md).
 - Review [diffing commands](cheatsheet.md#diffing-changes).
 - Review [cleanup commands](cheatsheet.md#cleanup).

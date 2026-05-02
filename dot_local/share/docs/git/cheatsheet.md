@@ -1,8 +1,20 @@
 # Git Cheatsheet (Practical)
 
-Related: [Git workflow notes](workflow.md)
+Related: [Git workflow notes](workflow.md), [Git recovery notes](recovery.md)
+
+Jump to:
+[Inspecting History](#inspecting-history) |
+[Inspecting Commits](#inspecting-commits) |
+[Diffing Changes](#diffing-changes) |
+[Daily Flow](#daily-flow) |
+[High-Value Tricks](#high-value-tricks) |
+[Exploration](#exploration) |
+[Cleanup](#cleanup) |
+[Recovery Pointers](#recovery-pointers)
 
 ## Inspecting History
+
+Related: [safe daily loop](workflow.md#safe-daily-loop), [lost commits](recovery.md#find-lost-commits)
 
 ### Basic log
 git log
@@ -26,6 +38,8 @@ git log --after="2024-01-01" --before="2024-02-01"
 
 ## Inspecting Commits
 
+Related: [reviewing before commit](workflow.md#reviewing-before-commit), [restore a file from history](recovery.md#restore-a-file-from-history)
+
 ### Show latest commit
 git show
 
@@ -47,6 +61,8 @@ git show <commit>:path/to/file
 ---
 
 ## Diffing Changes
+
+Related: [reviewing before commit](workflow.md#reviewing-before-commit), [unstage without losing work](recovery.md#unstage-without-losing-work)
 
 ### Unstaged changes
 git diff
@@ -74,9 +90,13 @@ git diff --stat
 - **Staging area** → what will be committed
 - **Commit history** → permanent record
 
+Related: [safe commands](recovery.md#safe-commands), [danger zone](recovery.md#danger-zone)
+
 ---
 
 ## Daily Flow
+
+Related: [safe daily loop](workflow.md#safe-daily-loop), [branching](workflow.md#branching)
 
 git status
 git add .
@@ -85,6 +105,8 @@ git commit -m "message"
 ---
 
 ## High-Value Tricks
+
+Related: [keeping history readable](workflow.md#keeping-history-readable), [undo last commit but keep changes](recovery.md#undo-last-commit-but-keep-changes)
 
 ### See what changed before committing
 git diff --staged
@@ -105,6 +127,8 @@ git commit --amend -m "new message"
 
 ## Exploration
 
+Related: [find lost commits](recovery.md#find-lost-commits), [restore a file from history](recovery.md#restore-a-file-from-history)
+
 ### Who changed a line?
 git blame path/to/file
 
@@ -115,8 +139,39 @@ git log -p -S "string"
 
 ## Cleanup
 
+Related: [clean untracked files safely](recovery.md#clean-untracked-files-safely)
+
 ### Remove untracked files
 git clean -fd
+
+---
+
+## Recovery Pointers
+
+### Unstage without losing work
+[Open recovery note](recovery.md#unstage-without-losing-work)
+
+git restore --staged path/to/file
+
+### Discard local file edits
+[Open recovery note](recovery.md#discard-local-file-edits)
+
+git restore path/to/file
+
+### Undo last commit but keep changes
+[Open recovery note](recovery.md#undo-last-commit-but-keep-changes)
+
+git reset --soft HEAD~1
+
+### Undo a shared commit safely
+[Open recovery note](recovery.md#undo-a-shared-commit-safely)
+
+git revert <commit>
+
+### Find lost commits
+[Open recovery note](recovery.md#find-lost-commits)
+
+git reflog
 
 ---
 
@@ -125,3 +180,4 @@ git clean -fd
 - Prefer `--oneline --graph --decorate --all` as your default log view
 - Always check `git diff --staged` before committing
 - Avoid `git reset --hard` unless you really mean it
+- Use [recovery notes](recovery.md) when undoing work, especially if commits have been shared

@@ -8,7 +8,106 @@ alias fix-userns="sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
 alias bat="batcat"
 
 ask() {
-  codex exec -m gpt-5.5 -c model_reasoning_effort=medium "$@"
+  codex exec -m gpt-5.5 -c model_reasoning_effort=medium --skip-git-repo-check "$@"
+}
+
+cheatsheet() {
+  local docs_dir="${CHEATSHEET_DIR:-$HOME/.local/share/docs}"
+  local topic="${1:-}"
+  local file
+
+  if [ ! -d "$docs_dir" ]; then
+    echo "Cheatsheet directory not found: $docs_dir"
+    return 1
+  fi
+
+  case "$topic" in
+    ""|-l|--list)
+      find "$docs_dir" -mindepth 2 -maxdepth 2 -name cheatsheet.md -print \
+        | while IFS= read -r file; do
+            file="${file%/cheatsheet.md}"
+            printf '%s\n' "${file##*/}"
+          done \
+        | sort
+      return
+      ;;
+    -h|--help)
+      echo "Usage: cheatsheet [--list|topic]"
+      echo "Examples: cheatsheet gcc, cheatsheet git, cheatsheet tmux"
+      return
+      ;;
+  esac
+
+  file="$docs_dir/$topic/cheatsheet.md"
+  if [ ! -f "$file" ]; then
+    echo "No cheatsheet found for '$topic'. Available cheatsheets:"
+    cheatsheet --list
+    return 1
+  fi
+
+  if command -v batcat >/dev/null 2>&1; then
+    batcat "$file"
+  elif command -v bat >/dev/null 2>&1; then
+    bat "$file"
+  else
+    less "$file"
+  fi
+}
+
+cs() {
+  local docs_dir="${CHEATSHEET_DIR:-$HOME/.local/share/docs}"
+  local input="${1:-}"
+  local entry_file
+  local entry_dir
+  local grip_server="${CS_GRIP_SERVER:-grip-cheatsheet}"
+  local grip_args=()
+
+  case "$input" in
+    ""|-l|--list)
+      cheatsheet --list
+      return
+      ;;
+    -h|--help)
+      echo "Usage: cs <topic|docs-dir|path.md>"
+      echo "Examples: cs gcc, cs git, cs ~/.local/share/docs/git/workflow.md"
+      return
+      ;;
+  esac
+
+  if [ -d "$input" ]; then
+    entry_file="$input/cheatsheet.md"
+  elif [ -f "$input" ]; then
+    entry_dir=$(dirname "$input")
+    entry_file="$entry_dir/cheatsheet.md"
+  elif [ -f "$docs_dir/$input/cheatsheet.md" ]; then
+    entry_file="$docs_dir/$input/cheatsheet.md"
+  else
+    echo "No cheatsheet entry point found for '$input'. Available cheatsheets:"
+    cheatsheet --list
+    return 1
+  fi
+
+  if [ ! -f "$entry_file" ]; then
+    echo "No cheatsheet.md found at: $entry_file"
+    return 1
+  fi
+
+  if ! command -v "$grip_server" >/dev/null 2>&1; then
+    echo "grip-cheatsheet is required to serve cheatsheets."
+    return 1
+  fi
+
+  if [ -n "${CS_HOST:-}" ]; then
+    grip_args+=(--host "$CS_HOST")
+  fi
+  if [ -n "${CS_PORT:-}" ]; then
+    grip_args+=(--port "$CS_PORT")
+  fi
+  if [ -n "${CS_THEME:-}" ]; then
+    grip_args+=(--theme "$CS_THEME")
+  fi
+
+  "$grip_server" "${grip_args[@]}" "$entry_file"
 }
 
 function extract () {

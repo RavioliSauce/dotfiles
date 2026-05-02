@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+grip_cmd=$(command -v grip) || {
+  echo "grip is required to serve cheatsheets." >&2
+  exit 1
+}
+
+grip_python=$(sed -n '1s/^#!//p' "$grip_cmd")
+if [ -z "$grip_python" ] || [ ! -x "$grip_python" ]; then
+  echo "Could not find the Python interpreter used by grip." >&2
+  exit 1
+fi
+
+PYTHONWARNINGS=ignore::SyntaxWarning exec "$grip_python" - "$@" <<'PY'
+import argparse
+import os
+import sys
+
+import markdown
+
+from grip.api import create_app
+from grip.app import Grip
+from grip.renderers import OfflineRenderer
+
+
+HIGHLIGHT_CSS = r"""
+<style id="cs-hash-highlight-style">
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .markdown-body .cs-target-heading {
+    margin-left: -8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background-color: rgba(56, 139, 253, 0.12);
+    background:
+      linear-gradient(90deg, rgba(88, 166, 255, 0.22), rgba(63, 185, 80, 0.08), transparent 78%);
+    box-shadow:
+      inset 3px 0 0 var(--fgColor-accent, #58a6ff),
+      0 0 0 1px rgba(88, 166, 255, 0.18);
+    animation: cs-target-pop 900ms ease-out;
+  }
+
+  .markdown-body .cs-target-section {
+    border-radius: 6px;
+    background-color: rgba(56, 139, 253, 0.07);
+    background-color: color-mix(in srgb, var(--bgColor-accent-muted, rgba(56, 139, 253, 0.20)) 38%, transparent);
+    transition: background-color 220ms ease;
+  }
+
+  @keyframes cs-target-pop {
+    0% {
+      box-shadow:
+        inset 3px 0 0 var(--fgColor-accent, #58a6ff),
+        0 0 0 7px rgba(88, 166, 255, 0.20);
+    }
+    100% {
+      box-shadow:
+        inset 3px 0 0 var(--fgColor-accent, #58a6ff),
+        0 0 0 1px rgba(88, 166, 255, 0.18);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    .markdown-body .cs-target-heading {
+      animation: none;
+    }
+  }
+</style>
+"""
+
+
+HIGHLIGHT_JS = r"""
+<script id="cs-hash-highlight-script">
+(function () {
+  var headingSelector = 'h1,h2,h3,h4,h5,h6';
+
+  function clearHighlight() {
+    document.querySelectorAll('.cs-target-heading, .cs-target-section').forEach(function (node) {
+      node.classList.remove('cs-target-heading', 'cs-target-section');
+    });
+  }
+
+  function hashId() {
+    if (!window.location.hash || window.location.hash.length < 2) {
+      return '';
+    }
+
+    try {
+      return decodeURIComponent(window.location.hash.slice(1));
+    } catch (error) {
+      return window.location.hash.slice(1);
+    }
+  }
+
+  function findHashTarget() {
+    var id = hashId();
+    if (!id) {
+      return null;
+    }
+
+    return document.getElementById(id) || document.getElementById('user-content-' + id);
+  }
+
+  function headingLevel(node) {
+    var match = node && node.tagName && node.tagName.match(/^H([1-6])$/);
+    return match ? Number(match[1]) : 7;
+  }
+
+  function findHeading(target) {
+    if (!target) {
+      return null;
+    }
+    if (target.matches && target.matches(headingSelector)) {
+      return target;
+    }
+    if (target.closest) {
+      var heading = target.closest(headingSelector);
+      if (heading) {
+        return heading;
+      }
+    }
+    return target;
+  }
+
+  function markSection(heading) {
+    var level = headingLevel(heading);
+    var node = heading.nextElementSibling;
+    var marked = 0;
+
+    heading.classList.add('cs-target-heading');
+
+    while (node && marked < 80) {
+      if (node.matches && node.matches(headingSelector) && headingLevel(node) <= level) {
+        break;
+      }
+      node.classList.add('cs-target-section');
+      marked += 1;
+      node = node.nextElementSibling;
+    }
+  }
+
+  function highlightHash() {
+    clearHighlight();
+
+    var target = findHashTarget();
+    if (!target) {
+      return;
+    }
+
+    markSection(findHeading(target));
+  }
+
+  function scheduleHighlight() {
+    window.setTimeout(highlightHash, 40);
+    window.setTimeout(highlightHash, 260);
+  }
+
+  window.addEventListener('hashchange', scheduleHighlight);
+  window.addEventListener('load', scheduleHighlight);
+
+  var content = document.getElementById('grip-content');
+  if (content && window.MutationObserver) {
+    new MutationObserver(function () {
+      if (window.location.hash) {
+        scheduleHighlight();
+      }
+    }).observe(content, { childList: true, subtree: true });
+  }
+
+  scheduleHighlight();
+})();
+</script>
+"""
+
+
+def patched_offline_render(self, text, auth=None):
+    return markdown.markdown(
+        text,
+        extensions=["fenced_code", "codehilite", "toc", "tables", "sane_lists"],
+        extension_configs={"codehilite": {"css_class": "highlight"}},
+    )
+
+
+OfflineRenderer.render = patched_offline_render
+
+
+def inject_highlight(html):
+    if "cs-hash-highlight-style" not in html:
+        html = html.replace("</head>", HIGHLIGHT_CSS + "\n</head>")
+    if "cs-hash-highlight-script" not in html:
+        html = html.replace("</body>", HIGHLIGHT_JS + "\n</body>")
+    return html
+
+
+class CheatsheetGrip(Grip):
+    def _render_page(self, subpath=None):
+        rendered = super()._render_page(subpath)
+        if isinstance(rendered, str):
+            return inject_highlight(rendered)
+        return rendered
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="Serve a cheatsheet with Grip, dark mode, and hash-section highlighting."
+    )
+    parser.add_argument("path", help="Path to the cheatsheet.md entry point.")
+    parser.add_argument("--host", default=os.environ.get("CS_HOST"))
+    parser.add_argument("--port", type=int, default=int(os.environ["CS_PORT"]) if os.environ.get("CS_PORT") else None)
+    parser.add_argument("--theme", default=os.environ.get("CS_THEME", "dark"))
+    parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--render-test", action="store_true", help=argparse.SUPPRESS)
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv or sys.argv[1:])
+    app = create_app(
+        args.path,
+        render_offline=True,
+        grip_class=CheatsheetGrip,
+        theme=args.theme,
+    )
+
+    if args.render_test:
+        print(app.render("/"))
+        return 0
+
+    app.run(args.host, args.port, open_browser=not args.no_browser)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY
