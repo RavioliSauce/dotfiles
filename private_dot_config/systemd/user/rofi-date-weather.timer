@@ -1,0 +1,11 @@
+[Unit]
+Description=Update rofi date menu weather cache every 3 hours
+
+[Timer]
+OnStartupSec=1min
+OnUnitActiveSec=3h
+AccuracySec=5min
+Unit=rofi-date-weather.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Update rofi date menu weather cache
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/rofi-date-menu --update-weather-cache

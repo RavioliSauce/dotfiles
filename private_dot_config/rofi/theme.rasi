@@ -36,7 +36,7 @@ window {
 mainbox {
     background-color: transparent;
     spacing: 16px;
-    children: [inputbar, listview, mode-switcher];
+    children: [inputbar, message, listview, mode-switcher];
 }
 
 inputbar {
@@ -74,6 +74,12 @@ listview {
     lines: 8;
     spacing: 8px;
     scrollbar: false;
+}
+
+message {
+    background-color: @surface;
+    border-radius: 12px;
+    padding: 12px 16px;
 }
 
 mode-switcher {

@@ -5,6 +5,344 @@ full_date=$(date '+%A, %B %d, %Y')
 current_time=$(date '+%-I:%M:%S %p %Z')
 iso_stamp=$(date --iso-8601=seconds)
 unix_stamp=$(date '+%s')
+year=$(date '+%Y')
+month=$(date '+%m')
+day=$(date '+%d')
+day_num=$(date '+%-d')
+calendar_width=20
+weather_width=48
+config_root=${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}
+weather_url_file="$config_root/rofi-date-menu/weather-url"
+weather_url=${ROFI_DATE_WEATHER_URL:-}
+cache_root=${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}
+cache_dir="$cache_root/rofi-date-menu"
+cache_file="$cache_dir/weather.txt"
+cache_meta="$cache_dir/weather.meta"
+cache_status="$cache_dir/weather.status"
+cache_error="$cache_dir/weather.error"
+weather_stale_after_seconds=$((3 * 60 * 60))
+
+if [ -z "$weather_url" ] && [ -r "$weather_url_file" ]; then
+  weather_url=$(sed -n '1p' "$weather_url_file")
+fi
+
+escape_markup() {
+  printf '%s' "$1" | sed \
+    -e 's/&/\&amp;/g' \
+    -e 's/</\&lt;/g' \
+    -e 's/>/\&gt;/g'
+}
+
+center_text() {
+  text=$1
+  width=$2
+  text_len=${#text}
+
+  if [ "$text_len" -ge "$width" ]; then
+    printf '%s' "$text"
+    return
+  fi
+
+  left_pad=$(((width - text_len) / 2))
+  right_pad=$((width - text_len - left_pad))
+  printf '%*s%s%*s' "$left_pad" '' "$text" "$right_pad" ''
+}
+
+build_calendar() {
+  title=$(date '+%B %Y')
+  first_weekday=$(date -d "$year-$month-01" '+%w')
+  days_in_month=$(date -d "$year-$month-01 +1 month -1 day" '+%-d')
+
+  printf '<span weight="bold">%s</span>\n' "$(escape_markup "$(center_text "$title" "$calendar_width")")"
+  printf 'Su Mo Tu We Th Fr Sa\n'
+
+  current_day=1
+  week_pos=0
+  raw_line=
+  markup_line=
+
+  while [ "$week_pos" -lt "$first_weekday" ]; do
+    raw_line="${raw_line}   "
+    markup_line="${markup_line}   "
+    week_pos=$((week_pos + 1))
+  done
+
+  while [ "$current_day" -le "$days_in_month" ]; do
+    cell=$(printf '%2d' "$current_day")
+    markup_cell=$cell
+
+    if [ "$current_day" -eq "$day_num" ]; then
+      markup_cell="<span foreground=\"#1a1b26\" background=\"#7aa2f7\" weight=\"bold\">$cell</span>"
+    fi
+
+    raw_line="${raw_line}${cell}"
+    markup_line="${markup_line}${markup_cell}"
+
+    if [ "$week_pos" -eq 6 ]; then
+      printf '%s\n' "$markup_line"
+      raw_line=
+      markup_line=
+      week_pos=0
+    else
+      raw_line="${raw_line} "
+      markup_line="${markup_line} "
+      week_pos=$((week_pos + 1))
+    fi
+
+    current_day=$((current_day + 1))
+  done
+
+  while [ "${#raw_line}" -gt 0 ] && [ "${#raw_line}" -lt "$calendar_width" ]; do
+    raw_line="${raw_line} "
+    markup_line="${markup_line} "
+  done
+
+  [ -n "$markup_line" ] && printf '%s\n' "$markup_line"
+}
+
+parse_weather() {
+  jq -r '
+      def precip:
+        .probabilityOfPrecipitation.value as $pop
+        | if $pop == null then "" else ", rain " + ($pop | tostring) + "%" end;
+
+      def wind:
+        if (.windSpeed // "") == "" then "" else ", " + (.windDirection // "") + " " + .windSpeed end;
+
+      .properties.periods // []
+      | .[:2][]
+      | (.name // "Forecast") + ": "
+        + ((.temperature | tostring) + (.temperatureUnit // ""))
+        + " " + (.shortForecast // "")
+        + precip
+        + wind
+    '
+}
+
+parse_weather_meta() {
+  jq -r '
+      .properties.periods[0].endTime // empty
+    '
+}
+
+fetch_weather() {
+  tmp_json="$cache_dir/weather.json.$$"
+
+  if ! curl -fsSL --connect-timeout 15 --max-time 30 \
+    -A 'rofi-date-menu/1.0 rav-local' \
+    -H 'Accept: application/geo+json' \
+    "$weather_url" > "$tmp_json" 2>"$cache_error"; then
+    rm -f "$tmp_json"
+    printf '%s\n' 'Weather fetch failed' > "$cache_status" 2>/dev/null || :
+    return 0
+  fi
+
+  if ! weather=$(parse_weather < "$tmp_json" 2>"$cache_error"); then
+    rm -f "$tmp_json"
+    printf '%s\n' 'Weather parse failed' > "$cache_status" 2>/dev/null || :
+    return 0
+  fi
+
+  if [ -z "$weather" ]; then
+    rm -f "$tmp_json"
+    printf '%s\n' 'Weather missing periods' > "$cache_status" 2>/dev/null || :
+    return 0
+  fi
+
+  first_period_end=$(parse_weather_meta < "$tmp_json" 2>/dev/null || :)
+  rm -f "$tmp_json"
+
+  if [ -n "$first_period_end" ]; then
+    tmp_meta="$cache_meta.$$"
+    printf '%s\n' "$first_period_end" > "$tmp_meta" 2>/dev/null && mv "$tmp_meta" "$cache_meta" 2>/dev/null || :
+  fi
+
+  printf '%s\n' "$weather"
+}
+
+weather_stale_reason() {
+  if [ ! -s "$cache_file" ]; then
+    printf '%s\n' 'No cached weather'
+    return 0
+  fi
+
+  now=$(date '+%s')
+  cache_time=$(date -r "$cache_file" '+%s' 2>/dev/null) || {
+    printf '%s\n' 'Weather cache timestamp unreadable'
+    return 0
+  }
+
+  if [ $((now - cache_time)) -ge "$weather_stale_after_seconds" ]; then
+    printf '%s\n' 'Weather cache is older than 3h'
+  fi
+
+  if [ -s "$cache_meta" ]; then
+    first_period_end=$(sed -n '1p' "$cache_meta" 2>/dev/null || :)
+
+    if [ -n "$first_period_end" ]; then
+      first_period_end_epoch=$(date -d "$first_period_end" '+%s' 2>/dev/null || :)
+      [ -z "$first_period_end_epoch" ] || [ "$now" -lt "$first_period_end_epoch" ] || printf '%s\n' 'First forecast period has ended'
+    fi
+  fi
+}
+
+refresh_weather_cache() {
+  command -v curl >/dev/null 2>&1 || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  mkdir -p "$cache_dir" 2>/dev/null || return 0
+
+  if [ -z "$weather_url" ]; then
+    printf '%s\n' 'Weather URL not configured' > "$cache_status" 2>/dev/null || :
+    printf '%s\n' "Set ROFI_DATE_WEATHER_URL or $weather_url_file" > "$cache_error" 2>/dev/null || :
+    return 0
+  fi
+
+  weather=$(fetch_weather)
+  if [ -z "$weather" ]; then
+    [ -s "$cache_status" ] || printf '%s\n' 'Weather unavailable' > "$cache_status" 2>/dev/null || :
+    return 0
+  fi
+
+  tmp_file="$cache_file.$$"
+  printf '%s\n' "$weather" | sed -n '1,4p' > "$tmp_file" 2>/dev/null || return 0
+  mv "$tmp_file" "$cache_file" 2>/dev/null || :
+  rm -f "$cache_status" "$cache_error"
+}
+
+if [ "${1:-}" = "--update-weather-cache" ]; then
+  refresh_weather_cache
+  exit 0
+fi
+
+load_weather() {
+  if [ -s "$cache_file" ]; then
+    sed -n '1,4p' "$cache_file" 2>/dev/null || :
+    return 0
+  fi
+}
+
+weather_placeholder() {
+  if [ -s "$cache_status" ]; then
+    sed -n '1p' "$cache_status" 2>/dev/null || :
+    [ -s "$cache_error" ] && sed -n '1p' "$cache_error" 2>/dev/null || :
+    return
+  fi
+
+  printf '%s\n' 'No cached weather'
+  printf '%s\n' 'Timer has not run yet'
+}
+
+weather_warnings() {
+  if [ -s "$cache_status" ]; then
+    sed -n '1p' "$cache_status" 2>/dev/null || :
+    [ -s "$cache_error" ] && sed -n '1p' "$cache_error" 2>/dev/null || :
+  fi
+
+  weather_stale_reason
+}
+
+wrap_weather() {
+  awk -v width="$weather_width" '
+    function trim(value) {
+      sub(/^ +/, "", value)
+      sub(/ +$/, "", value)
+      return value
+    }
+
+    {
+      line = trim($0)
+
+      while (length(line) > width) {
+        cut = width
+
+        while (cut > 1 && substr(line, cut, 1) != " ") {
+          cut--
+        }
+
+        if (cut == 1) {
+          cut = width
+        }
+
+        print trim(substr(line, 1, cut))
+        line = trim(substr(line, cut + 1))
+      }
+
+      if (line != "") {
+        print line
+      }
+    }
+  '
+}
+
+build_weather() {
+  weather_lines=$(load_weather | wrap_weather | sed -n '1,7p')
+  warning_lines=$(weather_warnings | wrap_weather | sed -n '1,4p')
+
+  printf '<span weight="bold">Today weather</span>\n'
+
+  if [ -z "$weather_lines" ]; then
+    weather_placeholder
+    return
+  fi
+
+  if [ -n "$warning_lines" ]; then
+    printf '<span foreground="#f7768e" weight="bold">Weather warning</span>\n'
+
+    printf '%s\n' "$warning_lines" | while IFS= read -r line; do
+      escape_markup "$line"
+      printf '\n'
+    done
+  fi
+
+  printf '%s\n' "$weather_lines" | while IFS= read -r line; do
+    escape_markup "$line"
+    printf '\n'
+  done
+}
+
+build_panel() {
+  empty_left=$(printf '%*s' "$calendar_width" '')
+
+  {
+    printf '<tt>'
+    {
+      build_calendar
+      printf '%s\n' '__ROFI_DATE_WEATHER__'
+      build_weather
+    } | awk -v gap='    ' -v empty_left="$empty_left" '
+      $0 == "__ROFI_DATE_WEATHER__" {
+        section = 1
+        next
+      }
+
+      section == 0 {
+        left[++left_count] = $0
+        next
+      }
+
+      {
+        right[++right_count] = $0
+      }
+
+      END {
+        line_count = left_count > right_count ? left_count : right_count
+
+        for (i = 1; i <= line_count; i++) {
+          printf "%s", i <= left_count ? left[i] : empty_left
+
+          if (i <= right_count && right[i] != "") {
+            printf "%s%s", gap, right[i]
+          }
+
+          printf "\n"
+        }
+      }
+    '
+    printf '</tt>'
+  }
+}
+
+calendar_markup=$(build_panel)
 
 choice=$(
   printf '%s\n' \
@@ -13,7 +351,7 @@ choice=$(
     "Copy ISO timestamp" \
     "Copy Unix timestamp" \
     "Show details" \
-  | rofi -dmenu -p "Date" -theme-str 'listview { lines: 5; }'
+  | rofi -dmenu -p "Date" -mesg "$calendar_markup" -theme-str 'listview { lines: 5; }'
 )
 
 [ -n "${choice:-}" ] || exit 0
