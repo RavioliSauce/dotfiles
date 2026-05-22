@@ -1,0 +1,107 @@
+#!/bin/sh
+set -eu
+
+rofi_lines=${AUDIO_OUTPUT_ROFI_LINES:-10}
+
+notify() {
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify "$@"
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send "$@"
+  fi
+}
+
+die_rofi() {
+  if command -v rofi >/dev/null 2>&1; then
+    rofi -e "$1"
+  else
+    printf '%s\n' "$1" >&2
+  fi
+  exit 1
+}
+
+require_wpctl() {
+  command -v wpctl >/dev/null 2>&1 || die_rofi "wpctl is not installed. Install the wireplumber package."
+}
+
+require_rofi() {
+  command -v rofi >/dev/null 2>&1 || die_rofi "rofi is not installed."
+}
+
+sink_rows() {
+  awk '
+    /Sinks:/ {
+      in_sinks = 1
+      next
+    }
+    /Sources:/ {
+      in_sinks = 0
+    }
+    in_sinks {
+      line = $0
+      if (match(line, /[0-9]+\./)) {
+        id = substr(line, RSTART, RLENGTH - 1)
+        name = substr(line, RSTART + RLENGTH)
+        sub(/^[[:space:]]*/, "", name)
+        sub(/[[:space:]]+\[vol:.*/, "", name)
+        state = line ~ /\*/ ? "[current]" : "[output]"
+        print state " " name "  " id
+      }
+    }
+  '
+}
+
+list_outputs() {
+  require_wpctl
+
+  status=$(wpctl status 2>&1) || die_rofi "$status"
+  rows=$(printf '%s\n' "$status" | sink_rows)
+  [ -n "$rows" ] || die_rofi "No audio outputs found."
+
+  printf '%s\n' "$rows"
+}
+
+extract_sink_id() {
+  printf '%s\n' "$1" | grep -Eo '[0-9]+$'
+}
+
+extract_sink_name() {
+  printf '%s\n' "$1" | sed 's/^\[[^]]*\] //; s/[[:space:]][[:space:]]*[0-9][0-9]*$//'
+}
+
+set_output() {
+  sink_id=$1
+  sink_name=$2
+
+  output=$(wpctl set-default "$sink_id" 2>&1) && {
+    notify "Audio" "Default output set to $sink_name"
+    return 0
+  }
+
+  notify "Audio output failed" "$output"
+  die_rofi "$output"
+}
+
+show_menu() {
+  require_rofi
+
+  rows=$(list_outputs)
+  choice=$(
+    printf '%s\n' "$rows" \
+      | rofi -dmenu -i -p "Audio output" -theme-str "listview { lines: ${rofi_lines}; }"
+  )
+
+  [ -n "${choice:-}" ] || exit 0
+
+  sink_id=$(extract_sink_id "$choice")
+  sink_name=$(extract_sink_name "$choice")
+  [ -n "$sink_id" ] || die_rofi "Could not read audio output id from selection."
+
+  set_output "$sink_id" "$sink_name"
+}
+
+case "${1:---menu}" in
+  --menu) show_menu ;;
+  --list) list_outputs ;;
+  *) die_rofi "Usage: audio-output-menu [--menu|--list]" ;;
+esac

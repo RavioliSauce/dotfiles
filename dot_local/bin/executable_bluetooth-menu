@@ -3,6 +3,7 @@ set -eu
 
 scan_seconds=${BLUETOOTH_SCAN_SECONDS:-8}
 rofi_lines=${BLUETOOTH_ROFI_LINES:-12}
+rofi_transition_delay=${BLUETOOTH_ROFI_TRANSITION_DELAY:-0.15}
 
 notify() {
   if command -v dunstify >/dev/null 2>&1; then
@@ -19,6 +20,10 @@ die_rofi() {
     printf '%s\n' "$1" >&2
   fi
   exit 1
+}
+
+wait_for_rofi_transition() {
+  [ "$rofi_transition_delay" = "0" ] || sleep "$rofi_transition_delay"
 }
 
 require_bluetoothctl() {
@@ -172,6 +177,9 @@ show_info() {
 
 device_menu() {
   mac=$1
+
+  wait_for_rofi_transition
+
   name=$(device_name "$mac")
   connected=$(device_prop "$mac" "Connected")
   trusted=$(device_prop "$mac" "Trusted")
@@ -218,6 +226,7 @@ device_menu() {
       show_info "$mac"
       ;;
     "Back")
+      wait_for_rofi_transition
       show_menu
       ;;
   esac
@@ -250,10 +259,12 @@ show_menu() {
   case "$choice" in
     "Scan for devices")
       scan_devices
+      wait_for_rofi_transition
       show_menu
       ;;
     "Turn Bluetooth on")
       run_bt "Bluetooth powered on" power on
+      wait_for_rofi_transition
       show_menu
       ;;
     "Turn Bluetooth off")
