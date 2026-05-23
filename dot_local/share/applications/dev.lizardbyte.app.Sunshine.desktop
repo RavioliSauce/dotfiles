@@ -1,0 +1,32 @@
+[Desktop Entry]
+Actions=Stop;Restart;OpenWeb;RunInTerminal;
+Categories=RemoteAccess;Network;
+Comment=Self-hosted game stream host for Moonlight
+Exec=/usr/bin/systemctl --user start sunshine.service
+Icon=sunshine
+Keywords=gamestream;stream;moonlight;remote play;
+Name=Sunshine
+StartupNotify=false
+Terminal=false
+Type=Application
+Version=1.0
+
+[Desktop Action Stop]
+Exec=/usr/bin/systemctl --user stop sunshine.service
+Icon=process-stop
+Name=Stop Sunshine
+
+[Desktop Action Restart]
+Exec=/usr/bin/systemctl --user restart sunshine.service
+Icon=view-refresh
+Name=Restart Sunshine
+
+[Desktop Action OpenWeb]
+Exec=xdg-open https://localhost:47990
+Icon=web-browser
+Name=Open Web UI
+
+[Desktop Action RunInTerminal]
+Exec=gio launch /usr/share/applications/dev.lizardbyte.app.Sunshine.terminal.desktop
+Icon=application-x-executable
+Name=Run in Terminal
