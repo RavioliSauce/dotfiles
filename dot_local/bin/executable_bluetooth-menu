@@ -54,6 +54,52 @@ device_name() {
   printf '%s\n' "$name"
 }
 
+device_has_bond() {
+  mac=$1
+  paired=$(device_prop "$mac" "Paired")
+  bonded=$(device_prop "$mac" "Bonded")
+
+  [ "$paired" = "yes" ] || [ "$bonded" = "yes" ]
+}
+
+device_ready() {
+  mac=$1
+  connected=$(device_prop "$mac" "Connected")
+
+  [ "$connected" = "yes" ] && device_has_bond "$mac"
+}
+
+device_state() {
+  mac=$1
+  connected=$(device_prop "$mac" "Connected")
+  paired=$(device_prop "$mac" "Paired")
+  bonded=$(device_prop "$mac" "Bonded")
+  trusted=$(device_prop "$mac" "Trusted")
+
+  printf 'Connected: %s\nPaired: %s\nBonded: %s\nTrusted: %s' \
+    "${connected:-unknown}" \
+    "${paired:-unknown}" \
+    "${bonded:-unknown}" \
+    "${trusted:-unknown}"
+}
+
+find_device_mac_by_name() {
+  name=$1
+
+  bluetoothctl devices 2>/dev/null \
+    | awk -v wanted="$name" '
+        /^Device[[:space:]]+([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}[[:space:]]+/ {
+          mac = $2
+          $1 = ""
+          $2 = ""
+          sub(/^[[:space:]]+/, "")
+          if ($0 == wanted) {
+            print mac
+            exit
+          }
+        }'
+}
+
 run_bt() {
   label=$1
   shift
@@ -76,27 +122,99 @@ trust_device() {
   }
 }
 
+pair_device() {
+  mac=$1
+  name=$2
+
+  bluetoothctl power on >/dev/null 2>&1 || true
+  bluetoothctl pairable on >/dev/null 2>&1 || true
+
+  if output=$(bluetoothctl --agent NoInputNoOutput --timeout 30 pair "$mac" 2>&1); then
+    trust_device "$mac" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  die_rofi "$(printf 'Pair failed for %s:\n%s\n\nPut the device in Bluetooth pairing mode and try Re-pair.' "$name" "$output")"
+}
+
 connect_device() {
   mac=$1
   name=$2
 
-  if output=$(bluetoothctl connect "$mac" 2>&1); then
+  bluetoothctl power on >/dev/null 2>&1 || true
+
+  if device_ready "$mac"; then
     trust_device "$mac" >/dev/null 2>&1 || true
-    notify "Bluetooth" "Connected and trusted $name"
+    notify "Bluetooth" "$name is already connected"
     return 0
   fi
 
+  if ! device_has_bond "$mac"; then
+    pair_device "$mac" "$name"
+  fi
+
+  if output=$(bluetoothctl connect "$mac" 2>&1); then
+    trust_device "$mac" >/dev/null 2>&1 || true
+    if device_ready "$mac"; then
+      notify "Bluetooth" "Connected and trusted $name"
+      return 0
+    fi
+
+    die_rofi "$(printf 'Bluetooth reported a connection, but %s is not fully paired:\n%s\n\nChoose Re-pair while the device is in pairing mode.' "$name" "$(device_state "$mac")")"
+  fi
+
   first_output=$output
-  pair_output=$(bluetoothctl --agent NoInputNoOutput --timeout 30 pair "$mac" 2>&1) || true
+  pair_output=$(bluetoothctl --agent NoInputNoOutput --timeout 30 pair "$mac" 2>&1) || {
+    die_rofi "$(printf 'Connect failed:\n%s\n\nPair attempt failed:\n%s' "$first_output" "$pair_output")"
+  }
   trust_device "$mac" >/dev/null 2>&1 || true
 
   if output=$(bluetoothctl connect "$mac" 2>&1); then
     trust_device "$mac" >/dev/null 2>&1 || true
-    notify "Bluetooth" "Connected and trusted $name"
-    return 0
+    if device_ready "$mac"; then
+      notify "Bluetooth" "Connected and trusted $name"
+      return 0
+    fi
+
+    die_rofi "$(printf 'Bluetooth reported a connection, but %s is not fully paired:\n%s' "$name" "$(device_state "$mac")")"
   fi
 
   die_rofi "$(printf 'Connect failed:\n%s\n\nPair attempt:\n%s\n\nSecond connect failed:\n%s' "$first_output" "$pair_output" "$output")"
+}
+
+repair_device() {
+  mac=$1
+  name=$2
+
+  notify "Bluetooth" "Put $name in pairing mode..."
+  bluetoothctl power on >/dev/null 2>&1 || true
+  bluetoothctl pairable on >/dev/null 2>&1 || true
+  bluetoothctl disconnect "$mac" >/dev/null 2>&1 || true
+  bluetoothctl remove "$mac" >/dev/null 2>&1 || true
+  bluetoothctl --timeout "$scan_seconds" scan on >/dev/null 2>&1 || true
+
+  if ! bluetoothctl info "$mac" >/dev/null 2>&1; then
+    new_mac=$(find_device_mac_by_name "$name")
+    [ -n "$new_mac" ] && mac=$new_mac
+  fi
+
+  if ! bluetoothctl info "$mac" >/dev/null 2>&1; then
+    die_rofi "$(printf 'Could not rediscover %s.\n\nHold the controller sync button until it flashes rapidly, then scan and Re-pair again.' "$name")"
+  fi
+
+  pair_device "$mac" "$name"
+
+  if output=$(bluetoothctl connect "$mac" 2>&1); then
+    trust_device "$mac" >/dev/null 2>&1 || true
+    if device_ready "$mac"; then
+      notify "Bluetooth" "Paired and connected $name"
+      return 0
+    fi
+
+    die_rofi "$(printf 'Re-pair did not finish cleanly for %s:\n%s' "$name" "$(device_state "$mac")")"
+  fi
+
+  die_rofi "$(printf 'Paired %s, but connect failed:\n%s' "$name" "$output")"
 }
 
 scan_devices() {
@@ -120,12 +238,19 @@ device_rows() {
 
         connected=$(device_prop "$mac" "Connected")
         paired=$(device_prop "$mac" "Paired")
+        bonded=$(device_prop "$mac" "Bonded")
         trusted=$(device_prop "$mac" "Trusted")
 
         state="[seen]"
         [ "$trusted" = "yes" ] && state="[trusted]"
-        [ "$paired" = "yes" ] && state="[paired]"
-        [ "$connected" = "yes" ] && state="[connected]"
+        { [ "$paired" = "yes" ] || [ "$bonded" = "yes" ]; } && state="[paired]"
+        if [ "$connected" = "yes" ]; then
+          if [ "$paired" = "yes" ] || [ "$bonded" = "yes" ]; then
+            state="[connected]"
+          else
+            state="[link-only]"
+          fi
+        fi
 
         [ -n "$name" ] || name=$(device_name "$mac")
         printf '%s %s  %s\n' "$state" "$name" "$mac"
@@ -152,13 +277,28 @@ status_label() {
 
   connected=$(bluetoothctl devices Connected 2>/dev/null || true)
   if [ -n "$connected" ]; then
-    count=$(printf '%s\n' "$connected" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
-    name=$(printf '%s\n' "$connected" | sed -n '1s/^Device [^[:space:]]* //p')
-    if [ "$count" = "1" ] && [ -n "$name" ]; then
-      short=$(printf '%s' "$name" | cut -c 1-18)
-      printf ' 󰂱 %s ' "$short"
+    healthy=$(
+      printf '%s\n' "$connected" \
+        | awk '/^Device[[:space:]]+([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}[[:space:]]+/ { print $2 }' \
+        | while read -r mac; do
+            [ -n "$mac" ] || continue
+            if device_ready "$mac"; then
+              printf '%s\t%s\n' "$mac" "$(device_name "$mac")"
+            fi
+          done
+    )
+
+    if [ -n "$healthy" ]; then
+      count=$(printf '%s\n' "$healthy" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+      name=$(printf '%s\n' "$healthy" | sed -n '1s/^[^	]*	//p')
+      if [ "$count" = "1" ] && [ -n "$name" ]; then
+        short=$(printf '%s' "$name" | cut -c 1-18)
+        printf ' 󰂱 %s ' "$short"
+      else
+        printf ' 󰂱 %s connected ' "$count"
+      fi
     else
-      printf ' 󰂱 %s connected ' "$count"
+      printf ' 󰂲 pairing issue '
     fi
     return
   fi
@@ -185,10 +325,14 @@ device_menu() {
   trusted=$(device_prop "$mac" "Trusted")
 
   actions=""
-  if [ "$connected" = "yes" ]; then
+  if device_ready "$mac"; then
     actions="${actions}Disconnect\n"
+  elif [ "$connected" = "yes" ]; then
+    actions="${actions}Re-pair\nDisconnect\n"
+  elif device_has_bond "$mac"; then
+    actions="${actions}Connect\nRe-pair\n"
   else
-    actions="${actions}Connect\n"
+    actions="${actions}Pair and connect\n"
   fi
 
   if [ "$trusted" = "yes" ]; then
@@ -201,7 +345,7 @@ device_menu() {
 
   choice=$(
     printf '%b' "$actions" \
-      | rofi -dmenu -i -p "$name" -theme-str "listview { lines: 7; }"
+      | rofi -dmenu -i -p "$name" -theme-str "listview { lines: 8; }"
   )
 
   [ -n "${choice:-}" ] || exit 0
@@ -209,6 +353,12 @@ device_menu() {
   case "$choice" in
     "Connect")
       connect_device "$mac" "$name"
+      ;;
+    "Pair and connect")
+      connect_device "$mac" "$name"
+      ;;
+    "Re-pair")
+      repair_device "$mac" "$name"
       ;;
     "Disconnect")
       run_bt "Disconnected $name" disconnect "$mac"
