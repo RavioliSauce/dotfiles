@@ -28,21 +28,3 @@ else
 fi
 
 exit "$status"
-
-Make it executable:
-
-chmod +x /home/rav/.local/bin/micro-json-lint
-
-Then register it in ~/.config/micro/init.lua:
-
-function init()
-    if linter then
-        linter.makeLinter(
-            "jqjson",
-            "json",
-            "/home/rav/.local/bin/micro-json-lint",
-            {"%f"},
-            "%f:%l:%c: %m"
-        )
-    end
-end
