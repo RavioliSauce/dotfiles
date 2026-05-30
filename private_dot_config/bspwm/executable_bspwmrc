@@ -11,7 +11,7 @@ feh --bg-scale "$HOME/Pictures/picture.jpg" &
 
 dunst &
 pgrep -x flameshot > /dev/null || flameshot &
-pgrep -x sunshine > /dev/null || sunshine &
+systemctl --user start sunshine.service &
 
 bspc monitor -d 1 2 3 4 5 6 7 8 9
 
