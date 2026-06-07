@@ -66,6 +66,15 @@ gcc -std=c17 -Wall -Wextra -pedantic main.c -o app
 ### Add an include directory
 gcc -Iinclude main.c -o app
 
+### Include headers and link the matching library
+gcc -Iinclude main.c -Llib -lmylib -o app
+
+### Link a bundled shared library from ./lib at runtime
+gcc -Iinclude main.c -Llib -Wl,-rpath,'$ORIGIN/lib' -lmylib -o app
+
+### Same rpath using explicit linker forwarding
+gcc -Iinclude main.c -Llib -Xlinker -rpath -Xlinker '$ORIGIN/lib' -lmylib -o app
+
 ### Add a library search directory
 gcc main.c -Llib -lmylib -o app
 
@@ -157,6 +166,14 @@ gcc -std=c17 -Iinclude -Wall -Wextra src/*.c -o app
 
 - Put options before source files when possible.
 - Put libraries after the objects or source files that need them.
+- `-Iinclude` only tells GCC where to find headers; it does not link library code.
+- A header provides declarations used while compiling. A library provides the compiled function bodies needed while linking.
+- `-lmylib` tells the linker to search for `libmylib.so` or `libmylib.a`; omit the `lib` prefix and file extension.
+- A dynamically linked `.so` must also be findable when the program runs, such as through the system library path, `LD_LIBRARY_PATH`, or an rpath.
+- `-Wl,option` passes `option` through GCC to the linker. Use `-Wl,-rpath,'$ORIGIN/lib'`, not `-rpath` by itself.
+- Do not put a space after `-Wl,`. `-Wl,-rpath,'$ORIGIN/lib'` is one comma-packed GCC argument; `-Wl, -rpath,'$ORIGIN/lib'` splits it and makes GCC see `-rpath` directly.
+- `-Wl,-rpath,'$ORIGIN/lib'` is equivalent to `-Xlinker -rpath -Xlinker '$ORIGIN/lib'`.
+- `$ORIGIN` in an rpath is expanded by the dynamic loader to the directory containing the executable. It is not a shell variable, so `echo "$ORIGIN"` normally prints nothing.
 - Use `-g` for debug symbols and `-O0` when stepping through code.
 - Use `-O2` for normal optimized builds; reach for `-O3` only after measuring.
 - Start with `-Wall -Wextra`; add `-Werror` only when you want warnings to fail the build.
